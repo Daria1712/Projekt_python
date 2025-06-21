@@ -4,7 +4,7 @@ import tkintermapview
 import requests
 from bs4 import BeautifulSoup
 
-users: list = []
+patients: list = []
 clinics: list = []
 doctors: list = []
 
@@ -185,6 +185,7 @@ def add_doctor():
     entry_doctor_location.delete(0, END)
     clinic_var.set("")
     show_doctors()
+    update_doctor_dropdown()
 
 def show_doctors():
     listbox_doctors.delete(0, END)
@@ -196,13 +197,15 @@ def remove_doctor():
         messagebox.showerror("Błąd", "Wybierz lekarza do usunięcia!")
         return
     i = listbox_doctors.index(ACTIVE)
-    doctor_patients = [user for user in users if user.doctor_id == doctors[i].get_doctor_id()]
+    doctor_patients = [patient for patient in patients if patient.doctor_id == doctors[i].get_doctor_id()]
     if doctor_patients:
         messagebox.showerror("Błąd", "Nie można usunąć lekarza, który ma przypisanych pacjentów!")
         return
     doctors[i].marker.delete()
     doctors.pop(i)
     show_doctors()
+    show_doctor_patients()
+    update_doctor_dropdown()
 
 def edit_doctor():
     if not listbox_doctors.curselection():
@@ -224,9 +227,15 @@ def update_doctor(i):
         messagebox.showerror("Błąd", "Wszystkie pola lekarza muszą być wypełnione!")
         return
     new_doctor = Doctor(name, surname, location, clinic_id)
+    if new_doctor.get_doctor_id() != doctors[i].get_doctor_id():
+        for patient in patients:
+            if patient.doctor_id == doctors[i].get_doctor_id():
+                patient.doctor_id = new_doctor.get_doctor_id()
     doctors[i].marker.delete()
     doctors[i] = new_doctor
     show_doctors()
+    show_doctor_patients()
+    update_doctor_dropdown()
     button_add_doctor.config(text='Dodaj lekarza', command=add_doctor)
     entry_doctor_name.delete(0, END)
     entry_doctor_surname.delete(0, END)
@@ -244,28 +253,137 @@ def employee_localization_handler():
     for doctor in doctors_in_clinic:
         map_widget.set_marker(doctor.coordinates[0], doctor.coordinates[1], text=f'{doctor.name} {doctor.surname}')
 
+def add_user():
+    name = entry_imie.get().strip()
+    surname = entry_nazwisko.get().strip()
+    data_urodzenia = entry_data_urodzenia.get().strip()
+    pesel = entry_pesel.get().strip()
+    location = entry_patient_location.get().strip()
+    doctor_id = doctor_patient_var.get() if doctor_patient_var.get() else None
+    if not all([name, surname, location, data_urodzenia, pesel]):
+        messagebox.showerror("Błąd", "Wszystkie pola muszą być wypełnione!")
+        return
+    if not location.replace(" ", "_").isalnum():
+        messagebox.showerror("Błąd", "Lokalizacja zawiera nieprawidłowe znaki!")
+        return
+    if any(patient.pesel == pesel for patient in patients):
+        messagebox.showerror("Błąd", "Pacjent z tym numerem PESEL już istnieje!")
+        return
+    patient = User(name=name, surname=surname, data_urodzenia=data_urodzenia, pesel=pesel, doctor_id=doctor_id, location=location)
+    patients.append(patient)
+    entry_imie.delete(0, END)
+    entry_nazwisko.delete(0, END)
+    entry_patient_location.delete(0, END)
+    entry_data_urodzenia.delete(0, END)
+    entry_pesel.delete(0, END)
+    clinic_patient_var.set("")
+    doctor_patient_var.set("")
+    show_users()
+    show_doctor_patients()
+
 def show_users():
     listbox_lista_obiektow.delete(0, END)
-    for idx, user in enumerate(users):
+    for idx, user in enumerate(patients):
         listbox_lista_obiektow.insert(idx, f'{idx + 1}. {user.name} {user.surname}')
 
-def remove_users():
+def remove_user():
     if not listbox_lista_obiektow.curselection():
         messagebox.showerror("Błąd", "Wybierz pacjenta do usunięcia!")
         return
     i = listbox_lista_obiektow.index(ACTIVE)
-    users[i].marker.delete()
-    users.pop(i)
+    patients[i].marker.delete()
+    patients.pop(i)
     show_users()
+    show_doctor_patients()
+
+def edit_user():
+    if not listbox_lista_obiektow.curselection():
+        messagebox.showerror("Błąd", "Wybierz pacjenta do edycji!")
+        return
+    i = listbox_lista_obiektow.index(ACTIVE)
+    name = patients[i].name
+    surname = patients[i].surname
+    location = patients[i].location
+    data_urodzenia = patients[i].data_urodzenia
+    pesel = patients[i].pesel
+    doctor_id = patients[i].doctor_id
+    clinic_id = [doctor.clinic_id for doctor in doctors if doctor.get_doctor_id() == doctor_id][0] if doctor_id else ""
+    entry_imie.insert(0, name)
+    entry_nazwisko.insert(0, surname)
+    entry_patient_location.insert(0, location)
+    entry_data_urodzenia.insert(0, data_urodzenia)
+    entry_pesel.insert(0, pesel)
+    doctor_patient_var.set(doctor_id if doctor_id else "")
+    clinic_patient_var.set(clinic_id if clinic_id else "")
+    button_dodaj_obiekt.config(text='Zapisz', command=lambda: update_user(i))
+
+def update_user(i):
+    name = entry_imie.get().strip()
+    surname = entry_nazwisko.get().strip()
+    location = entry_patient_location.get().strip()
+    data_urodzenia = entry_data_urodzenia.get().strip()
+    pesel = entry_pesel.get().strip()
+    doctor_id = doctor_patient_var.get() if doctor_patient_var.get() else None
+    if not all([name, surname, location, data_urodzenia, pesel]):
+        messagebox.showerror("Błąd", "Wszystkie pola muszą być wypełnione!")
+        return
+    if not location.replace(" ", "_").isalnum():
+        messagebox.showerror("Błąd", "Lokalizacja zawiera nieprawidłowe znaki!")
+        return
+    if any(user.pesel == pesel and user is not patients[i] for user in patients):
+        messagebox.showerror("Błąd", "Pacjent z tym numerem PESEL już istnieje!")
+        return
+    patients[i].marker.delete()
+    new_patient = User(name, surname, location, data_urodzenia, pesel, doctor_id)
+    patients[i] = new_patient
+    show_users()
+    show_doctor_patients()
+    button_dodaj_obiekt.config(text='Dodaj pacjenta', command=add_user)
+    entry_imie.delete(0, END)
+    entry_nazwisko.delete(0, END)
+    entry_patient_location.delete(0, END)
+    entry_data_urodzenia.delete(0, END)
+    entry_pesel.delete(0, END)
+    clinic_patient_var.set("")
+    doctor_patient_var.set("")
+
+def show_doctor_patients():
+    if not doctors or not listbox_doctors.curselection():
+        listbox_doctor_patients.delete(0, END)
+        return
+    i = listbox_doctors.index(ACTIVE)
+    listbox_doctor_patients.delete(0, END)
+    doctor = doctors[i]
+    doctor_patients = [patient for patient in patients if patient.doctor_id == doctor.get_doctor_id()]
+    for idx, patient in enumerate(doctor_patients):
+        listbox_doctor_patients.insert(idx, f'{idx + 1}. {patient.name} {patient.surname}')
+    map_widget.delete_all_marker()
+    for patient in doctor_patients:
+        map_widget.set_marker(patient.coordinates[0], patient.coordinates[1], text=f'{patient.name} {patient.surname}')
 
 def update_clinic_dropdown():
     clinic_menu['menu'].delete(0, 'end')
+    clinic_patient_menu['menu'].delete(0, 'end')
     for clinic in clinics:
+        clinic_patient_menu['menu'].add_command(label=clinic.name, command=lambda c=clinic.name: clinic_patient_var.set(c))
         clinic_menu['menu'].add_command(label=clinic.name, command=lambda c=clinic.name: clinic_var.set(c))
+
+def update_doctor_dropdown():
+    doctor_patient_menu['menu'].delete(0, 'end')
+    for doctor in doctors:
+        doctor_id = doctor.get_doctor_id()
+        doctor_patient_menu['menu'].add_command(label=doctor_id, command=lambda d=doctor_id: doctor_patient_var.set(d))
+
+def on_clinic_patient_change(*args):
+    clinic_id = clinic_patient_var.get()
+    selected_doctors_from_clinic = [doctor for doctor in doctors if doctor.clinic_id == clinic_id]
+    doctor_patient_menu['menu'].delete(0, 'end')
+    for selected_doctor in selected_doctors_from_clinic:
+        doctor_patient_menu['menu'].add_command(label=selected_doctor.get_doctor_id(), command=lambda c=selected_doctor.get_doctor_id(): doctor_patient_var.set(c))
 
 root = Tk()
 root.geometry("1600x1000")
-root.title("Lista pacjentów")
+root.title("Zarządzanie Przychodnią")
 root.state('zoomed')
 
 main_frame = Frame(root)
@@ -283,18 +401,18 @@ scrollable_frame.bind(
 canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
 canvas.configure(yscrollcommand=scrollbar.set)
 
-ramka_clinics = Frame(scrollable_frame, padx=10, pady=10)
-ramka_doctors = Frame(scrollable_frame, padx=10, pady=10)
-ramka_lista_obiektow = Frame(scrollable_frame, padx=10, pady=10)
-ramka_mapa = Frame(scrollable_frame, padx=10, pady=10)
+ramka_clinics = Frame(scrollable_frame, padx=15, pady=15)
+ramka_doctors = Frame(scrollable_frame, padx=15, pady=15)
+ramka_patients = Frame(scrollable_frame, padx=15, pady=15)
+ramka_map = Frame(scrollable_frame, padx=15, pady=15)
 
-ramka_clinics.grid(row=0, column=0, sticky="nsew")
-ramka_doctors.grid(row=0, column=1, sticky="nsew")
-ramka_lista_obiektow.grid(row=0, column=2, sticky="nsew")
-ramka_mapa.grid(row=1, column=0, columnspan=3, sticky="nsew")
+ramka_clinics.grid(row=1, column=0, padx=8, pady=8, sticky="nsew")
+ramka_doctors.grid(row=1, column=1, padx=8, pady=8, sticky="nsew")
+ramka_map.grid(row=1, column=2, padx=8, pady=8, sticky="nsew")
+ramka_patients.grid(row=2, column=0, columnspan=2, padx=8, pady=8, sticky="nsew")
 
-scrollable_frame.grid_rowconfigure(0, weight=1)
-scrollable_frame.grid_rowconfigure(1, weight=1)
+scrollable_frame.grid_rowconfigure(1, weight=2)
+scrollable_frame.grid_rowconfigure(2, weight=3)
 scrollable_frame.grid_columnconfigure(0, weight=1)
 scrollable_frame.grid_columnconfigure(1, weight=1)
 scrollable_frame.grid_columnconfigure(2, weight=1)
@@ -394,6 +512,8 @@ listbox_doctors = Listbox(doctor_frame, width=50, height=8, font=("Arial", 9))
 doctor_scrollbar = Scrollbar(doctor_frame, orient="vertical")
 listbox_doctors.config(yscrollcommand=doctor_scrollbar.set)
 doctor_scrollbar.config(command=listbox_doctors.yview)
+listbox_doctors.bind('<<ListboxSelect>>', lambda event: show_doctor_patients())
+
 listbox_doctors.pack(side=LEFT, fill=BOTH, expand=True)
 doctor_scrollbar.pack(side=RIGHT, fill=Y)
 
@@ -409,21 +529,108 @@ button_edit_doctor.pack(side=LEFT, padx=5)
 ramka_doctors.grid_columnconfigure(1, weight=1)
 ramka_doctors.grid_rowconfigure(8, weight=1)
 
-# ramka_lista_obiektow
-label_lista_obiektow = Label(ramka_lista_obiektow, text="Lista pacjentów:", font=("Arial", 14, "bold"))
-label_lista_obiektow.grid(row=0, column=0, columnspan=2)
+# ramka_patients
+label_patients = Label(ramka_patients, text="Zarządzanie pacjentami:", font=("Arial", 14, "bold"))
+label_patients.grid(row=0, column=0, columnspan=6, pady=(0, 15))
 
-listbox_lista_obiektow = Listbox(ramka_lista_obiektow, width=50, height=10)
-listbox_lista_obiektow.grid(row=1, column=0, columnspan=2)
+label_patient_form = Label(ramka_patients, text="Dodaj pacjenta:", font=("Arial", 11, "bold"))
+label_patient_form.grid(row=1, column=0, columnspan=6, sticky=W, pady=(0, 10))
 
-button_usun_obiekt = Button(ramka_lista_obiektow, text="Usuń", command=remove_users)
-button_usun_obiekt.grid(row=2, column=0, pady=5)
+label_imie = Label(ramka_patients, text="Imię:", font=("Arial", 10))
+label_imie.grid(row=2, column=0, sticky=W, pady=3, padx=(0, 5))
+entry_imie = Entry(ramka_patients, width=40, font=("Arial", 10))
+entry_imie.grid(row=2, column=1, pady=3, sticky="ew", padx=(0, 15))
 
-# ramka_mapa
-map_widget = tkintermapview.TkinterMapView(ramka_mapa, width=1200, height=400, corner_radius=0)
-map_widget.grid(row=0, column=0, columnspan=2)
-map_widget.set_position(52.23, 21.00)
+label_nazwisko = Label(ramka_patients, text="Nazwisko:", font=("Arial", 10))
+label_nazwisko.grid(row=3, column=0, sticky=W, pady=3, padx=(0, 5))
+entry_nazwisko = Entry(ramka_patients, width=40, font=("Arial", 10))
+entry_nazwisko.grid(row=3, column=1, pady=3, sticky="ew", padx=(0, 15))
+
+label_przychodnia = Label(ramka_patients, text="Przychodnia:", font=("Arial", 10))
+label_przychodnia.grid(row=4, column=0, sticky=W, pady=3, padx=(0, 5))
+clinic_patient_var = StringVar()
+clinic_patient_var.set("")
+clinic_patient_var.trace("w", on_clinic_patient_change)
+clinic_patient_menu = OptionMenu(ramka_patients, clinic_patient_var, "")
+clinic_patient_menu.grid(row=4, column=1, pady=3, sticky="w", padx=(0, 15))
+
+label_data_urodzenia = Label(ramka_patients, text="Data urodzenia:", font=("Arial", 10))
+label_data_urodzenia.grid(row=2, column=2, sticky=W, pady=3, padx=(15, 5))
+entry_data_urodzenia = Entry(ramka_patients, width=40, font=("Arial", 10))
+entry_data_urodzenia.grid(row=2, column=3, pady=3, sticky="ew", padx=(0, 15))
+
+label_pesel = Label(ramka_patients, text="Numer PESEL:", font=("Arial", 10))
+label_pesel.grid(row=3, column=2, sticky="w", pady=3, padx=(15, 5))
+entry_pesel = Entry(ramka_patients, width=40, font=("Arial", 10))
+entry_pesel.grid(row=3, column=3, pady=3, sticky="ew", padx=(0, 15))
+
+entry_patient_location_label = Label(ramka_patients, text="Lokalizacja:", font=("Arial", 10))
+entry_patient_location_label.grid(row=3, column=4, sticky="w", pady=3, padx=(15, 5))
+entry_patient_location = Entry(ramka_patients, width=40, font=("Arial", 10))
+entry_patient_location.grid(row=3, column=5, pady=3, sticky="ew", padx=(0, 15))
+
+label_doctor = Label(ramka_patients, text="Lekarz:", font=("Arial", 10))
+label_doctor.grid(row=4, column=2, sticky=W, pady=3, padx=(15, 5))
+doctor_patient_var = StringVar()
+doctor_patient_menu = OptionMenu(ramka_patients, doctor_patient_var, "")
+doctor_patient_menu.grid(row=4, column=3, pady=3, sticky="w", padx=(0, 15))
+
+button_dodaj_obiekt = Button(ramka_patients, text="Dodaj pacjenta", command=add_user, font=("Arial", 11), bg="#4CAF50", fg="white")
+button_dodaj_obiekt.grid(row=5, column=0, columnspan=6, pady=15)
+
+label_lista_obiektow = Label(ramka_patients, text="Lista pacjentów:", font=("Arial", 11, "bold"))
+label_lista_obiektow.grid(row=6, column=0, columnspan=6, sticky=W, pady=(10, 5))
+
+patient_frame = Frame(ramka_patients)
+patient_frame.grid(row=7, column=0, columnspan=6, pady=5, sticky="nsew")
+
+listbox_lista_obiektow = Listbox(patient_frame, width=80, height=10, font=("Arial", 9))
+patient_scrollbar = Scrollbar(patient_frame, orient="vertical")
+listbox_lista_obiektow.config(yscrollcommand=patient_scrollbar.set)
+patient_scrollbar.config(command=listbox_lista_obiektow.yview)
+
+listbox_lista_obiektow.pack(side=LEFT, fill=BOTH, expand=True)
+patient_scrollbar.pack(side=RIGHT, fill=Y)
+
+button_frame_patients = Frame(ramka_patients)
+button_frame_patients.grid(row=8, column=0, columnspan=6, pady=10)
+
+button_usun_obiekt = Button(button_frame_patients, text="Usuń", command=remove_user, font=("Arial", 10), bg="#f44336", fg="white")
+button_usun_obiekt.pack(side=LEFT, padx=8)
+
+button_edytuj_obiekt = Button(button_frame_patients, text="Edytuj", command=edit_user, font=("Arial", 10), bg="#FF9800", fg="white")
+button_edytuj_obiekt.pack(side=LEFT, padx=8)
+
+ramka_patients.grid_columnconfigure(1, weight=1)
+ramka_patients.grid_columnconfigure(3, weight=1)
+ramka_patients.grid_columnconfigure(5, weight=1)
+ramka_patients.grid_rowconfigure(7, weight=1)
+
+# ramka_map
+label_map = Label(ramka_map, text="Mapa:", font=("Arial", 14, "bold"))
+label_map.pack(pady=(0, 10))
+
+map_widget = tkintermapview.TkinterMapView(ramka_map, width=500, height=400, corner_radius=5)
+map_widget.pack(expand=True, fill=BOTH, padx=5, pady=5)
+map_widget.set_position(52.0, 19.5)
 map_widget.set_zoom(6)
+
+separator_frame = Frame(ramka_map, height=2, bg="gray")
+separator_frame.pack(fill=X, padx=10, pady=10)
+
+label_doctor_patients = Label(ramka_map, text="Pacjenci wybranego lekarza:", font=("Arial", 11, "bold"))
+label_doctor_patients.pack(anchor=W, padx=10)
+
+doctor_patients_frame = Frame(ramka_map)
+doctor_patients_frame.pack(fill=BOTH, expand=True, padx=10, pady=(5, 10))
+
+listbox_doctor_patients = Listbox(doctor_patients_frame, width=45, height=6, font=("Arial", 9))
+doctor_patients_scrollbar = Scrollbar(doctor_patients_frame, orient="vertical")
+listbox_doctor_patients.config(yscrollcommand=doctor_patients_scrollbar.set)
+doctor_patients_scrollbar.config(command=listbox_doctor_patients.yview)
+
+listbox_doctor_patients.pack(side=LEFT, fill=BOTH, expand=True)
+doctor_patients_scrollbar.pack(side=RIGHT, fill=Y)
 
 canvas.pack(side="left", fill="both", expand=True)
 scrollbar.pack(side="right", fill="y")
@@ -433,5 +640,6 @@ def _on_mousewheel(event):
 
 canvas.bind_all("<MouseWheel>", _on_mousewheel)
 update_clinic_dropdown()
+update_doctor_dropdown()
 
 root.mainloop()
